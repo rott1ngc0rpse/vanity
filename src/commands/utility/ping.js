@@ -7,11 +7,15 @@ const command = {
     .setDescription('Replies with Pong!'),
 
   async execute(interaction) {
-    await interaction.reply('Pong!');
+    sent = await interaction.reply({ content: 'Pinging...', fetchReply: true });
+    interaction.editReply(`Roundtrip latency: ${sent.createdTimestamp - interaction.createdTimestamp}ms`);
+
   },
 
   async executeMessage(message, args) {
-    await message.reply('Pong!');
+    sent = await message.reply({ content: 'Pinging...', fetchReply: true });
+    message.editReply(`Roundtrip latency: ${sent.createdTimestamp - interaction.createdTimestamp}ms`);
+
   },
 
   cooldown: 3,

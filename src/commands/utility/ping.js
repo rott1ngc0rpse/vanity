@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, CommandInteraction, Message } = require('discord.js');
+const { SlashCommandBuilder, Message } = require('discord.js');
 
 // Define the command object
 const command = {
@@ -13,11 +13,10 @@ const command = {
   },
 
   async executeMessage(message, args) {
-    sent = await message.reply({ content: 'Pinging...', fetchReply: true });
-    message.editReply(`Roundtrip latency: ${sent.createdTimestamp - interaction.createdTimestamp}ms`);
-
-  },
-
+    const sent = await message.reply({ content: 'Pinging...', fetchReply: true });
+    await sent.edit(`Roundtrip latency: ${sent.createdTimestamp - message.createdTimestamp}ms`);
+  },  
+  
   cooldown: 3,
   enabled: true,
   developerOnly: false,

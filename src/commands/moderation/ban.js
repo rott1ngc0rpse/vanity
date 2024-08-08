@@ -5,14 +5,14 @@ const PermissionChecker = require('../../utils/permissionChecks');
 const command = {
   data: new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Bans a user from the server')
-    .addUserOption(option =>
-      option.setName('target')
-        .setDescription('The user to ban')
+    .setDescription('Bans one or more users from the server')
+    .addStringOption(option =>
+      option.setName('targets')
+        .setDescription('The users to ban (mention or ID, separated by spaces)')
         .setRequired(true))
     .addStringOption(option =>
       option.setName('reason')
-        .setDescription('The reason for banning the user')
+        .setDescription('The reason for banning the users')
         .setRequired(false))
     .addIntegerOption(option =>
       option.setName('days')
@@ -26,13 +26,18 @@ const command = {
       return interaction.reply({ content: checkResult.message, ephemeral: true });
     }
 
-    const target = interaction.options.getUser('target');
+    const targetsString = interaction.options.getString('targets');
+    const targets = targetsString.match(/\d{17,19}/g) || [];
     const reason = interaction.options.getString('reason') || 'No reason provided';
     const days = interaction.options.getInteger('days') || 7;
 
+    if (targets.length === 0) {
+      return interaction.reply({ content: 'No valid user IDs provided.', ephemeral: true });
+    }
+
     try {
-      const result = await this.banUser(interaction, target, reason, days);
-      await interaction.reply(result);
+      const results = await this.banUsers(interaction, targets, reason, days);
+      await interaction.reply(this.formatResults(results));
     } catch (error) {
       await interaction.reply({ content: error.message, ephemeral: true });
     }
@@ -44,50 +49,66 @@ const command = {
       return message.reply(checkResult.message);
     }
 
-    if (!args.length) {
-      return message.reply('Please mention a user to ban.');
+    if (args.length < 1) {
+      return message.reply('Please provide at least one user to ban.');
     }
 
-    const target = message.mentions.users.first() || await message.client.users.fetch(args[0]).catch(() => null);
-    if (!target) {
-      return message.reply('Unable to find the specified user.');
-    }
+    const targets = message.mentions.users.map(u => u.id).concat(args.filter(arg => /^\d{17,19}$/.test(arg)));
+    const reason = args.filter(arg => !/^\d{17,19}$/.test(arg) && !message.mentions.users.some(u => u.toString() === arg)).join(' ') || 'No reason provided';
+    const days = 7; // Default to 0 for message commands
 
-    const reason = args.slice(1).join(' ') || 'No reason provided';
-    const days = 0; // Default to 0 for message commands, or you could parse it from args if needed
+    if (targets.length === 0) {
+      return message.reply('No valid targets provided.');
+    }
 
     try {
-      const result = await this.banUser(message, target, reason, days);
-      await message.reply(result);
+      const results = await this.banUsers(message, targets, reason, days);
+      await message.reply(this.formatResults(results));
     } catch (error) {
       await message.reply(error.message);
     }
   },
 
-  async banUser(context, target, reason, days) {
+  async banUsers(context, targets, reason, days) {
     const guild = context.guild;
     const executor = context.member;
-    const member = await guild.members.fetch(target.id).catch(() => null);
+    const results = { successful: [], failed: [] };
 
-    const permChecker = new PermissionChecker(guild, executor, member, 'ban');
-    const canBan = await permChecker.check();
+    for (const targetId of targets) {
+      try {
+        const target = await context.client.users.fetch(targetId);
+        const member = await guild.members.fetch(targetId).catch(() => null);
 
-    if (!canBan) {
-      throw new Error(`Cannot ban this user: ${permChecker.getError()}`);
+        const permChecker = new PermissionChecker(guild, executor, member, 'ban');
+        const canBan = await permChecker.check();
+
+        if (!canBan) {
+          results.failed.push({ user: target, reason: permChecker.getError() });
+          continue;
+        }
+
+        await guild.members.ban(target, { reason: reason, deleteMessageSeconds: `${days}` * 24 * 60 * 60 });
+        results.successful.push(target);
+      } catch (error) {
+        results.failed.push({ user: { id: targetId }, reason: error.message });
+      }
     }
 
-    try {
-      await guild.members.ban.bulkCreate([target], { reason: reason, deleteMessageDays: days });
-      return `Successfully banned ${target.tag} for reason: ${reason}. Deleted ${days} days of messages.`;
-    } catch (error) {
-      throw new Error(`Failed to ban ${target.tag}: ${error.message}`);
-    }
+    return results;
   },
 
-  cooldown: 5,
-  enabled: true,
-  developerOnly: false,
-  nsfwOnly: false,
+  formatResults(results) {
+    let message = '';
+    if (results.successful.length > 0) {
+      message += `Successfully banned: ${results.successful.map(u => u.tag || u.id).join(', ')}\n`;
+    }
+    if (results.failed.length > 0) {
+      message += `Failed to ban: ${results.failed.map(f => `${f.user.tag || f.user.id} (${f.reason})`).join(', ')}`;
+    }
+    return message;
+  },
+
+  cooldown: 3,
   category: 'Moderation',
   permissions: [PermissionFlagsBits.BanMembers]
 };

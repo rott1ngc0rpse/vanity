@@ -1,6 +1,14 @@
 const { CommandInteraction, Message, TextChannel } = require('discord.js');
 const config = require('../../config.json');
 
+class userChecker {
+  constructor(guild, executor, target) {
+    this.guild = guild;
+    this.executor = executor;
+    this.target = target;
+  }
+}
+
 // Function to run command checks
 function runCommandChecks(command, context) {
   // Check if the command is enabled
@@ -40,6 +48,23 @@ function isDeveloper(userId) {
 // Helper function to check if a channel is NSFW
 function isNSFWChannel(channel) {
   return channel instanceof TextChannel && channel.nsfw;
+}
+
+// Check if a required user parameter is provided
+function validateUserParameter() {
+  if (this.targets.length === 0) {
+    return message.reply('No valid targets provided.');
+  }
+}
+
+// Check if the user exists
+async function validateUserExists(client, userId) {
+  try {
+    await client.users.fetch(userId);
+    return { passed: true };
+  } catch {
+    return { passed: false, message: 'User not found.' };
+  }
 }
 
 module.exports = {
